@@ -1,0 +1,112 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "server.name" . }}-deploy
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ template "server.name" . }}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "server.name" . }}
+        dns-policy: enabled
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+      - name: {{ template "server.name" . }}
+        image: codeurjc/server:v1.0
+        command: ["bash"]
+        args:
+        - "-c"
+        - "./wait-for-it.sh {{ template "mysql.name" . }}-service:{{ .Values.mysql.port }} -t 500 -- ./wait-for-it.sh {{ template "rabbitmq.name" . }}-service:{{ .Values.rabbitmq.port }} -t 500 -- node src/server.js"
+        env:
+        - name: MYSQL_HOST
+          value: {{ template "mysql.name" . }}-service
+        - name: MYSQL_DB
+          value: {{ .Values.mysql.databaseName }}
+        - name: MYSQL_USER
+          value: {{ .Values.mysql.rootUser }}
+        - name: MYSQL_PASS
+          value: {{ .Values.mysql.rootPassword }}
+        - name: RABBITMQ_URL
+          value: amqp://root:password@{{ template "rabbitmq.name" . }}-service
+        ports:
+        - containerPort: {{ .Values.server.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "server.name" . }}-service
+  labels:
+    app: {{ template "server.name" . }}
+spec:
+  ports:
+  - port: {{ .Values.server.port }}
+    targetPort: {{ .Values.server.port }}
+    {{- if not .Values.ingress.enabled }}
+    nodePort: {{ .Values.server.nodeport }}
+    {{- end }}
+    protocol: TCP
+    name: server-port
+  selector:
+    app: {{ template "server.name" . }}
+  {{- if .Values.ingress.enabled }}
+  type: ClusterIP
+  {{- else}}
+  type: NodePort
+  {{- end}}
+---
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ template "server.name" . }}-to-mysql-rabbit
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "server.name" . }}
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: {{ template "mysql.name" . }}
+    ports:
+    - port: {{ .Values.mysql.port }}
+      protocol: TCP
+  - to:
+    - podSelector:
+        matchLabels:
+          app: {{ template "rabbitmq.name" . }}
+    ports:
+    - port: {{ .Values.rabbitmq.port }}
+      protocol: TCP
+{{- end }}
+---
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ template "server.name" . }}-from-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "server.name" . }}
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx
+      ports:
+      - protocol: TCP
+        port: {{ .Values.server.port }}
+{{- end }}

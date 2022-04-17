@@ -1,0 +1,106 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "toposervice.name" . }}-deploy
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ template "toposervice.name" . }}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "toposervice.name" . }}
+        dns-policy: enabled
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+      - name: {{ template "toposervice.name" . }}
+        image: {{ .Values.toposervice.image }}:{{ .Values.toposervice.tag }}
+        env:
+        - name: SPRING_DATA_MONGODB_HOST
+          value: {{ template "mongodb.name" . }}-service
+        - name: SPRING_DATA_MONGODB_PORT
+          value: {{ .Values.mongodb.port | quote }}
+        - name: SPRING_DATA_MONGODB_DATABASE
+          value: {{ .Values.mongodb.databaseName }}
+        - name: SPRING_DATA_MONGODB_AUTHENTICATION-DATABASE
+          value: admin
+        - name: SPRING_DATA_MONGODB_USERNAME
+          value: {{ .Values.mongodb.defaultUser }}
+        - name: SPRING_DATA_MONGODB_PASSWORD
+          value: {{ .Values.mongodb.defaultPassword }}
+        ports:
+        - containerPort: {{ .Values.toposervice.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "toposervice.name" . }}-service
+  labels:
+    app: {{ template "toposervice.name" . }}
+spec:
+  ports:
+  - port: {{ .Values.toposervice.port }}
+    targetPort: {{ .Values.toposervice.port }}
+    {{- if not .Values.ingress.enabled }}
+    nodePort: {{ .Values.toposervice.nodeport }}
+    {{- end }}
+    protocol: TCP
+    name: topo-port
+  selector:
+    app: {{ template "toposervice.name" . }}
+  {{- if .Values.ingress.enabled }}
+  type: ClusterIP
+  {{- else}}
+  type: NodePort
+  {{- end}}
+---
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ template "toposervice.name" . }}-to-mongodb
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "toposervice.name" . }}
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: {{ template "mongodb.name" . }}
+    ports:
+    - port: {{ .Values.mongodb.port }}
+      protocol: TCP
+{{- end }}
+---
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ template "toposervice.name" . }}-from-planner-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "toposervice.name" . }}
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: {{ template "planner.name" . }}
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: {{ .Values.toposervice.port }}
+{{- end }}
