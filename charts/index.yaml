@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  eoloplanner:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2022-04-18T20:12:11.17245593+02:00"
+    description: Practica Helm Eoloplant
+    digest: 882cd9fd246294c7d9652c7d67523599b85a47e8ca75062353a4b1c6d0821ede
+    name: eoloplanner
+    type: application
+    urls:
+    - eoloplanner-0.1.0.tgz
+    version: 0.1.0
+generated: "2022-04-18T20:12:11.158991836+02:00"
