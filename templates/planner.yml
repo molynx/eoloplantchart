@@ -1,0 +1,74 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "planner.name" . }}-deploy
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ template "planner.name" . }}
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: {{ template "planner.name" . }}
+        dns-policy: enabled
+    spec:
+      securityContext:
+        runAsUser: 1001
+      restartPolicy: Always
+      containers:
+      - name: {{ template "planner.name" . }}
+        image: {{ .Values.planner.image }}:{{ .Values.planner.tag }}
+        env:
+        - name: TOPO_HOST
+          value: {{ template "toposervice.name" . }}-service
+        - name: TOPO_PORT
+          value: {{ .Values.toposervice.port | quote }}
+        - name: GRPC_CLIENT_WEATHERSERVER_ADDRESS
+          value: static://{{ template "weatherservice.name" . }}-service:{{ .Values.weatherservice.port }}
+        - name: SPRING_CLOUD_STREAM_RABBIT_BINDER_NODES
+          value: {{ template "rabbitmq.name" . }}-service:{{ .Values.rabbitmq.port }}
+        - name: SPRING_RABBITMQ_HOST
+          value: {{ template "rabbitmq.name" . }}-service
+        - name: SPRING_RABBITMQ_PORT
+          value: {{ .Values.rabbitmq.port | quote }}
+        - name: SPRING_RABBITMQ_USERNAME
+          value: {{ .Values.rabbitmq.defaultUser }}
+        - name: SPRING_RABBITMQ_PASSWORD
+          value: {{ .Values.rabbitmq.defaultPassword }}
+---
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ template "planner.name" . }}-to-rabbit-weather-topo
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "planner.name" . }}
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: {{ template "rabbitmq.name" . }}
+    ports:
+    - port: {{ .Values.rabbitmq.port }}
+      protocol: TCP
+  - to:
+    - podSelector:
+        matchLabels:
+          app: {{ template "weatherservice.name" . }}
+    ports:
+    - port: {{ .Values.weatherservice.port }}
+      protocol: TCP
+  - to:
+    - podSelector:
+        matchLabels:
+          app: {{ template "toposervice.name" . }}
+    ports:
+    - port: {{ .Values.toposervice.port }}
+      protocol: TCP
+{{- end }}
