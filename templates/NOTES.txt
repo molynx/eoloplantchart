@@ -1,6 +1,7 @@
 1. Server URL
 {{- if .Values.ingress.enabled }}
-  http://{{ .Values.ingress.host }}/
+export INGRESS_PORT=$(kubectl get service ingress-nginx-controller -n ingress-nginx --output='jsonpath={.spec.ports[0].nodePort}')
+  http://{{ .Values.ingress.host }}:$INGRESS_PORT/
 {{- else if contains "NodePort" .Values.server.servicetype }}
   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "server.name" . }}-service )
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
@@ -14,7 +15,8 @@
 {{- end }}
 2. Toposervice Api URL
 {{- if .Values.ingress.enabled }}
-  http://{{ .Values.ingress.host }}/toposervice/
+export INGRESS_PORT=$(kubectl get service ingress-nginx-controller -n ingress-nginx --output='jsonpath={.spec.ports[0].nodePort}')
+  http://{{ .Values.ingress.host }}$INGRESS_PORT/toposervice/
 {{- else if contains "NodePort" .Values.toposervice.servicetype }}
   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ template "toposervice.name" . }}-service )
   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
